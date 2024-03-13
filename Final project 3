@@ -1,0 +1,297 @@
+
+import yahoo_fin.stock_info as si
+import yfinance as yf
+import os
+import datetime
+import hvplot.pandas
+import plotly.express as px
+import plotly.graph_objects as go
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+
+# Set the start and end dates for the data
+start_date = "2014-02-01"
+end_date = "2024-02-01"
+# Set the list of assets
+assets = ["^TNX", "^TYX", "AAPL", "ABBV", "AMZN", "BAC", "BRK-B", "CVX", "GOOG", "GOOGL", "HD", "JNJ", "JPM", "KO", "LLY", "MA", "META", "MRK", "MSFT", "NVDA", "PEP", "PFE", "PG", "TSLA", "UNH", "V", "XOM", "BTC-USD", "ETH-USD"]
+
+#Downloading 10 years of data from yahoo finance.
+assets_data = yf.download(assets, period="10y")
+# Loop through the assets and get the data for each one
+for asset in assets:
+  data = si.get_data(asset, start_date=start_date, end_date=end_date)
+  # Rename the first column to "Date"
+  data.rename(columns={data.columns[0]: "Date"}, inplace=True)
+  data = data.reset_index()
+  data = data.drop(columns=['ticker'], axis=1)
+  data = data.rename(columns={'index': 'Date', 'open': 'Open', 'high': 'High', 'low': 'Low', 'close': 'Close', 'adjclose': 'Adj Close', 'volume': 'Volume'})
+  data = data.set_index('Date')
+  # From the Data frame Print the Column names
+  print(f"Column names for {asset}: {data.columns}")
+  # Set the order of the Columns
+  columns = ['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume']
+ 
+directory = 'asset_historical_prices'
+
+# Check if the directory exists
+if not os.path.exists(directory):
+    # If it doesn't exist, create it
+    os.makedirs(directory)
+
+# Save the data to a CSV file
+    filename = os.path.join(directory, f"{asset}.csv")
+    data.to_csv(filename, index=True, columns=columns) 
+    
+print("Done!")  
+#putting stock data into a df called closing_prices
+closing_prices = pd.DataFrame(assets_data["Adj Close"].dropna(how="all"))
+closing_prices
+
+#drop any NAN values that continue to appear
+closing_prices = closing_prices.dropna()
+closing_prices
+# Reset index if the date is in the index
+closing_prices.reset_index(inplace=True)
+
+# Create an interactive line chart with color
+fig = px.line(closing_prices, x='Date', y=closing_prices.columns[1:], title='Closing Prices of Stocks',
+              labels={'value': 'Closing Price', 'variable': 'Stock'},
+              line_shape="linear", render_mode="svg",
+              color_discrete_sequence=px.colors.qualitative.Set1)
+
+# Show the figure
+fig.show()
+
+# Set the list of assets
+assets = ["AAPL", "ABBV", "AMZN", "BAC", "CVX", "GOOG", "JNJ", "KO", "MA", "MSFT", "NVDA", "PEP", "PG", "TSLA", "V", "BRK-B", "BTC-USD", "ETH-USD", "PFE", "UNH", "XOM", "^TNX", "^TYX"]
+
+# Download historical data
+assets_data = yf.download(assets, period="10y", group_by='ticker')
+
+# List to store MSE values and corresponding stock symbols
+mse_list = []
+
+# Extract features and target variable for each stock
+for stock in assets:
+    features = assets_data[stock]['Adj Close'].shift(1)  # Use the previous day's adjusted closing price as a feature
+    target = assets_data[stock]['Adj Close']
+
+    # Drop NaN values introduced by the shift operation
+    data = pd.concat([features, target], axis=1).dropna()
+
+    # Split the data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(data.iloc[:-1, :-1], data.iloc[:-1, -1], test_size=0.2, random_state=42)
+
+    # Initialize the linear regression model
+    model = LinearRegression()
+
+    # Fit the model to the training data
+    model.fit(X_train.values.reshape(-1, 1), y_train)
+
+    # Make predictions on the test set
+    predictions = model.predict(X_test.values.reshape(-1, 1))
+
+    # Evaluate the model performance
+    mse = mean_squared_error(y_test, predictions)
+
+    # Append MSE value and stock symbol to the list
+    mse_list.append((stock, mse))
+
+# Sort the list of tuples based on MSE values
+sorted_mse_list = sorted(mse_list, key=lambda x: x[1])
+
+# Print the sorted MSE values
+for stock, mse in sorted_mse_list:
+    print(f'Mean Squared Error for {stock}: {mse}')
+
+# Set the list of assets
+assets = ["AAPL", "ABBV", "AMZN", "BAC", "CVX", "GOOG", "JNJ", "KO", "MA", "MSFT", "NVDA", "PEP", "PG", "TSLA", "V", "BRK-B", "BTC-USD", "ETH-USD", "PFE", "UNH", "XOM", "^TNX", "^TYX"]
+
+# Download historical data
+assets_data = yf.download(assets, period="10y", group_by='ticker')
+
+# Initialize the linear regression model
+model = LinearRegression()
+
+# Loop through each stock
+for stock in assets:
+    # Extract features and target variable
+    features = assets_data[stock]['Adj Close'].shift(1)  # Use the previous day's adjusted closing price as a feature
+    target = assets_data[stock]['Adj Close']
+
+    # Drop NaN values introduced by the shift operation
+    data = pd.concat([features, target], axis=1).dropna()
+
+    # Split the data into training and testing sets
+    X_train, X_test, y_train, y_test = train_test_split(data.iloc[:-1, :-1], data.iloc[:-1, -1], test_size=0.2, random_state=42)
+
+    # Fit the model to the training data
+    model.fit(X_train.values.reshape(-1, 1), y_train)
+
+    # Make predictions on the test set
+    predictions = model.predict(X_test.values.reshape(-1, 1))
+    
+
+    # Residual plot
+    residuals = y_test - predictions
+    plt.scatter(X_test, residuals, label=f'{stock} Residuals')
+    plt.axhline(y=0, color='black', linestyle='--', label='Zero Residuals')
+    plt.xlabel(f'Previous day\'s Adj Close - {stock}')
+    plt.ylabel('Residuals')
+    plt.title(f'Residual Plot for {stock} Stock')
+    plt.legend()
+    plt.show()
+
+
+
+# Set the list of assets
+assets = ["^TNX", "^TYX", "AAPL", "ABBV", "AMZN", "BAC", "BRK-B", "CVX", "GOOG", "GOOGL", "HD", "JNJ", "JPM", "KO", "LLY", "MA", "META", "MRK", "MSFT", "NVDA", "PEP", "PFE", "PG", "TSLA", "UNH", "V", "XOM", "BTC-USD", "ETH-USD"]
+
+# Set the end date as today
+end_date = datetime.datetime.today().strftime('%Y-%m-%d')
+
+# Calculate the start date by subtracting 10 years from today
+start_date = (datetime.datetime.today() - datetime.timedelta(days=365 * 10)).strftime('%Y-%m-%d')
+
+# Download historical data from Yahoo Finance
+assets_data = yf.download(assets, start=start_date, end=end_date, progress=False)
+
+# Create an interactive plot using Plotly
+fig = go.Figure()
+
+for asset in assets:
+    fig.add_trace(go.Scatter(x=assets_data.index, y=assets_data['Adj Close'][asset], mode='lines', name=asset))
+
+# Add layout information
+fig.update_layout(
+
+    xaxis=dict(title='Date'),
+    yaxis=dict(title='Adjusted Closing Price'),
+    legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+)
+
+# Show the interactive plot
+fig.show()
+
+# Set the list of assets
+assets = ["^TNX", "^TYX", "AAPL", "ABBV", "AMZN", "BAC", "BRK-B", "CVX", "GOOG", "GOOGL", "HD", "JNJ", "JPM", "KO", "LLY", "MA", "META", "MRK", "MSFT", "NVDA", "PEP", "PFE", "PG", "TSLA", "UNH", "V", "XOM", "BTC-USD", "ETH-USD"]
+
+# Set the end date as today
+end_date = datetime.datetime.today().strftime('%Y-%m-%d')
+
+# Calculate the start date by subtracting 10 years from today
+start_date = (datetime.datetime.today() - datetime.timedelta(days=365 * 10)).strftime('%Y-%m-%d')
+
+# Download historical data from Yahoo Finance
+assets_data = yf.download(assets, start=start_date, end=end_date, progress=False)
+
+# Calculate daily returns
+daily_returns = assets_data['Adj Close'].pct_change()
+
+# Create an interactive plot using Plotly for daily returns
+fig = go.Figure()
+
+for asset in assets:
+    fig.add_trace(go.Scatter(x=daily_returns.index, y=daily_returns[asset], mode='lines', name=asset))
+
+# Add layout information
+fig.update_layout(
+    xaxis=dict(title='Date'),
+    yaxis=dict(title='Daily Return'),
+    legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1)
+)
+
+# Show the interactive plot
+fig.show()
+# Plotting a correlation matrix
+correlation_matrix = assets_data['Adj Close'].corr()
+plt.figure(figsize=(10, 8))
+plt.imshow(correlation_matrix, cmap='coolwarm', interpolation='none')
+plt.colorbar()
+plt.xticks(range(len(correlation_matrix)), correlation_matrix.columns, rotation='vertical')
+plt.yticks(range(len(correlation_matrix)), correlation_matrix.columns)
+plt.title('Correlation Matrix of Adjusted Closing Prices')
+plt.show()
+
+# Set the start and end dates for the data(10 year window)
+start_date = "2014-02-02"
+end_date = "2024-02-01"
+# Defining the assets 
+assets = ["^TNX", "^TYX", "AAPL", "ABBV", "AMZN", "BAC", "BRK-B", "CVX", "GOOG", "GOOGL", "HD", "JNJ", "JPM", "KO", "LLY", "MA", "META", "MRK", "MSFT", "NVDA", "PEP", "PFE", "PG", "TSLA", "UNH", "V", "XOM", "BTC-USD", "ETH-USD"]
+
+ # Calculate past volatility 
+returns = assets_data.pct_change()
+volatility = returns.std() * np.sqrt(252) 
+#SAME CHART YOU CAN PICK---Historical Volatility of Assets
+fig = go.Figure()
+
+fig.add_trace(go.Bar(x=volatility.index, y=volatility.sort_values(ascending=False), marker_color='skyblue'))
+
+fig.update_layout(
+    title='Historical Volatility of Assets',
+    xaxis=dict(title='Asset'),
+    yaxis=dict(title='Volatility'),
+    xaxis_tickangle=-45,
+    showlegend=False,  # Since there's only one trace, legend is not necessary
+    template="plotly_dark"
+)
+
+fig.show()
+
+#SAME CHART YOU CAN PICK --- Historical Volatility of Assets
+# Plot historical volatility
+plt.figure(figsize=(12, 6))
+volatility.sort_values(ascending=False).plot(kind='bar', color='skyblue')
+plt.title('Historical Volatility of Assets')
+plt.xlabel('Asset')
+plt.ylabel('Volatility')
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+plt.show()
+rolling_mean = assets_data.rolling(window=50, min_periods=1).mean()
+rolling_std = assets_data.rolling(window=50, min_periods=1).std()
+#SAME CHART YOU CAN PICK---Rolling Mean of Asset Prices
+
+plt.figure(figsize=(12, 6))
+for asset in assets:
+    plt.plot(rolling_mean.index, rolling_mean[asset], label=asset)
+plt.title('Rolling Mean of Asset Prices (Window = 50)')
+plt.xlabel('Date')
+plt.ylabel('Rolling Mean')
+plt.legend()
+plt.grid(True)
+plt.show() 
+#SAME CHART YOU CAN PICK----Rolling Mean of Asset Prices
+fig = go.Figure()
+
+for asset in assets:
+    fig.add_trace(go.Scatter(x=rolling_mean.index, y=rolling_mean[asset], mode='lines', name=asset))
+
+fig.update_layout(
+    title='Rolling Mean of Asset Prices (Window = 50)',
+    xaxis=dict(title='Date'),
+    yaxis=dict(title='Rolling Mean'),
+    legend=dict(orientation="h"),
+    showlegend=True,
+    template="plotly_dark"
+)
+
+fig.show()
+
+# Calculate cumulative returns
+cumulative_returns = (1 + returns).cumprod() - 1
+
+# Plot cumulative returns
+cumulative_returns.hvplot(title='Cumulative Returns of Assets', xlabel='Date', ylabel='Cumulative Returns', width=800, height=400)
+
+# Calculate Sharpe ratio
+risk_free_rate = 0.03  
+sharpe_ratio = (returns.mean() - risk_free_rate) / returns.std()
+
+# Plot Sharpe ratio
+sharpe_ratio.hvplot(kind='bar', color='hotpink', title='Sharpe Ratio of Assets', xlabel='Asset', ylabel='Sharpe Ratio', rot=45, width=800, height=400)
+
